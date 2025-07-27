@@ -1,192 +1,120 @@
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-#include <vector>
-#include <string>
-#include <stdexcept>
-#include <thread>
-#include <iostream>
+#define NOGDICAPMASKS     // CC_*, LC_*, PC_*, CP_*, TC_*, RC_
+#define NOVIRTUALKEYCODES // VK_*
+#define NOWINMESSAGES     // WM_*, EM_*, LB_*, CB_*
+#define NOWINSTYLES       // WS_*, CS_*, ES_*, LBS_*, SBS_*, CBS_*
+#define NOSYSMETRICS      // SM_*
+#define NOMENUS           // MF_*
+#define NOICONS           // IDI_*
+#define NOKEYSTATES       // MK_*
+#define NOSYSCOMMANDS     // SC_*
+#define NORASTEROPS       // Binary and Tertiary raster ops
+#define NOSHOWWINDOW      // SW_*
+#define OEMRESOURCE       // OEM Resource values
+#define NOATOM            // Atom Manager routines
+#define NOCLIPBOARD       // Clipboard routines
+#define NOCOLOR           // Screen colors
+#define NOCTLMGR          // Control and Dialog routines
+#define NODRAWTEXT        // DrawText() and DT_*
+#define NOGDI             // All GDI defines and routines
+#define NOKERNEL          // All KERNEL defines and routines
+#define NOUSER            // All USER defines and routines
+//#define NONLS             // All NLS defines and routines
+#define NOMB              // MB_* and MessageBox()
+#define NOMEMMGR          // GMEM_*, LMEM_*, GHND, LHND, associated routines
+#define NOMETAFILE        // typedef METAFILEPICT
+#define NOMINMAX          // Macros min(a,b) and max(a,b)
+#define NOMSG             // typedef MSG and associated routines
+#define NOOPENFILE        // OpenFile(), OemToAnsi, AnsiToOem, and OF_*
+#define NOSCROLL          // SB_* and scrolling routines
+#define NOSERVICE         // All Service Controller routines, SERVICE_ equates, etc.
+#define NOSOUND           // Sound driver routines
+#define NOTEXTMETRIC      // typedef TEXTMETRIC and associated routines
+#define NOWH              // SetWindowsHook and WH_*
+#define NOWINOFFSETS      // GWL_*, GCL_*, associated routines
+#define NOCOMM            // COMM driver routines
+#define NOKANJI           // Kanji support stuff.
+#define NOHELP            // Help engine interface.
+#define NOPROFILER        // Profiler interface.
+#define NODEFERWINDOWPOS  // DeferWindowPos routines
+#define NOMCX             // Modem Configuration Extensions
+#include "raylib.h"
+#include "network/network.h"
 
-#pragma comment (lib, "Ws2_32.lib")
-
-class Client
+void DrawCenteredText(std::string text, int fontSize, Color color = BLACK)
 {
-public:
-	struct Settings
-	{
-		std::string ip;
-		std::string port;
-		bool debugMessages;
-		size_t secondsTimeout;
-	};
+	int textWidth = MeasureText(text.c_str(), fontSize);
+	int screenWidth = GetScreenWidth();
+	int screenHeight = GetScreenHeight();
 
-private:
-	SOCKET socket;
-	bool connected;
-	Settings settings;
+	int x = (screenWidth - textWidth) / 2;
+	int y = (screenHeight - fontSize) / 2;
 
-public:
-	Client(Settings newSettings)
-	{
-		socket = INVALID_SOCKET;
-		connected = false;
-		settings = newSettings;
+	DrawText(text.c_str(), x, y, fontSize, BLACK);
+}
 
-		Connect();
-	}
-
-	~Client()
-	{
-		Disconnect();
-	}
-
-	bool Connect()
-	{
-		WSADATA wsaData;
-		int status = WSAStartup(MAKEWORD(2, 2), &wsaData);
-		if (status != 0)
+std::string queryReceive;
+void ReceiveMsgThread(Client& client)
+{
+	std::thread([&client]()
 		{
-			throw std::runtime_error("WSAStartup failed with status code " + std::to_string(status));
-			return false;
-		}
-
-		struct addrinfo* result = nullptr;
-		struct addrinfo hints;
-
-		ZeroMemory(&hints, sizeof(hints));
-		hints.ai_family = AF_INET;
-		hints.ai_socktype = SOCK_STREAM;
-		hints.ai_protocol = IPPROTO_TCP;
-
-		status = getaddrinfo(settings.ip.c_str(), settings.port.c_str(), &hints, &result);
-		if (status != 0)
-		{
-			throw std::runtime_error("getaddrinfo failed with status code " + std::to_string(status));
-			WSACleanup();
-			return false;
-		}
-
-		socket = ::socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-		if (socket == INVALID_SOCKET)
-		{
-			throw std::runtime_error("socket failed with status code " + std::to_string(WSAGetLastError()));
-			freeaddrinfo(result);
-			WSACleanup();
-			return false;
-		}
-
-		status = connect(socket, result->ai_addr, (int)result->ai_addrlen);
-		if (status == SOCKET_ERROR)
-		{
-			throw std::runtime_error("connect failed with status code " + std::to_string(WSAGetLastError()));
-			closesocket(socket);
-			freeaddrinfo(result);
-			WSACleanup();
-			return false;
-		}
-
-		freeaddrinfo(result);
-		connected = true;
-
-		if (settings.debugMessages)
-		{
-			std::cout << "Connected to server.\n";
-		}
-
-		return true;
-	}
-
-	void Disconnect()
-	{
-		if (connected)
-		{
-			shutdown(socket, SD_BOTH);
-			closesocket(socket);
-			WSACleanup();
-			connected = false;
-
-			if (settings.debugMessages)
+			while (true)
 			{
-				std::cout << "Disconnected.\n";
+				queryReceive = client.Receive();
 			}
 		}
-	}
-
-	bool Send(std::string message)
-	{
-		if (!connected)
-		{
-			return false;
-		}
-
-		size_t sizeSent = 0;
-		size_t messageSize = message.size() + 1;
-
-		while (sizeSent < messageSize)
-		{
-			int sent = send(socket, message.c_str(), messageSize, 0);
-			if (sent == SOCKET_ERROR)
-			{
-				return false;
-			}
-			sizeSent += sent;
-		}
-		return true;
-	}
-
-	std::string Receive()
-	{
-		if (!connected)
-		{
-			return "";
-		}
-
-		std::string result;
-		char buffer[1024];
-
-		while (true)
-		{
-			int received = recv(socket, buffer, sizeof(buffer), 0);
-			if (received == SOCKET_ERROR || received == 0)
-			{
-				break;
-			}
-
-			result.append(buffer, received);
-
-			if (received < sizeof(buffer))
-			{
-				break;
-			}
-		}
-
-		return result;
-	}
-
-	std::string Communicate(std::string message)
-	{
-		Send(message);
-		return Receive();
-	}
-
-	bool IsConnected()
-	{
-		return connected;
-	}
-};
+	).detach();
+}
 
 int main()
 {
+	// Connecting to the sever
 	Client::Settings settings;
 	settings.port = "3709";
 	settings.ip = "127.0.0.1";
 	settings.debugMessages = false;
-	settings.secondsTimeout = 5;
-
+	settings.alwaysConnect = true;
+	settings.secondsTimeout = -1;
 	Client client(settings);
-	while (true)
+	ReceiveMsgThread(client);
+
+	// Setting raylib
+	InitWindow(900, 700, "Tele Tiky Tac");
+	SetTargetFPS(60);
+
+	// Game loop
+	while (!WindowShouldClose())
 	{
-		std::cout << client.Receive() << "\n";
+		BeginDrawing();
+
+		ClearBackground(RAYWHITE);
+		if (!client.IsConnected())
+		{
+			DrawCenteredText("Server isn't running", 32);
+		}
+		else
+		{
+			if (queryReceive.find("WaitScreen") != std::string::npos) // idk why yet
+			{
+				DrawCenteredText("Waiting for second player", 32);
+			}
+			else if (queryReceive.starts_with("StartIn"))
+			{
+				DrawCenteredText("Starting in " + queryReceive.substr(7), 32);
+			}
+			else if (queryReceive.find("Start") != std::string::npos)
+			{
+				while (true)
+				{
+					if (queryReceive.find("GameEnd") != std::string::npos) // idk why yet
+					{
+						DrawCenteredText("Game Ended", 32);
+						break;
+					}
+				}
+			}
+		}
+
+		EndDrawing();
 	}
+	CloseWindow();
 }

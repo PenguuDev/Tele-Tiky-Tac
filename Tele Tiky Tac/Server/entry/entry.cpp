@@ -352,6 +352,29 @@ int HasPlayerLeft(Server& server, Server::Client& player1, Server::Client& playe
 	return status;
 }
 
+std::string player1Query;
+std::string player2Query;
+
+void ReceiveMsgThread(Server& server, Server::Client& player1, Server::Client& player2)
+{
+	std::thread([&server, &player1]()
+		{
+			while (true)
+			{
+				player1Query = server.Receive(player1);
+			}
+		}
+	).detach();
+	std::thread([&server, &player2]()
+		{
+			while (true)
+			{
+				player1Query = server.Receive(player2);
+			}
+		}
+	).detach();
+}
+
 int main()
 {
 	// Initializing our server
@@ -362,9 +385,12 @@ int main()
 
 	// Server loop
 	bool hasGameStarted = false;
+	bool hasRoundStarted = false;
+	bool hasToldClientToStart = false;
 
 	Server::Client player1;
 	Server::Client player2;
+	ReceiveMsgThread(server, player1, player2);
 	while (true)
 	{
 		player1 = server.GetClient(0);
@@ -372,6 +398,7 @@ int main()
 		if (!player1.connected || !player2.connected)
 		{
 			server.Send(player1, "WaitScreen");
+			hasToldClientToStart = false;
 			Sleep(1000);
 		}
 		else if (player1.connected && player2.connected)
@@ -389,6 +416,23 @@ int main()
 					Sleep(1000);
 				}
 			}
+			//while (true)
+			//{
+			//	if (!hasToldClientToStart)
+			//	{
+			//		server.Broadcast("Start");
+			//		hasToldClientToStart = true;
+			//	}
+			//	int hasPlayerLeft = HasPlayerLeft(server, player1, player2);
+			//	if (hasPlayerLeft != 2)
+			//	{
+			//		break;
+			//	}
+			//	else
+			//	{
+			//		// Game using receive query
+			//	}
+			//}
 		}
 	}
 }

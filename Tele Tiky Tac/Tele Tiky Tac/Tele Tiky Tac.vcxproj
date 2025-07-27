@@ -160,6 +160,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="entry\entry.cpp" />
+    <ClCompile Include="network\network.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="network\network.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
